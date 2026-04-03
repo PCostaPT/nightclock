@@ -3,18 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#000000">
-<link rel="manifest" href="manifest.json">
-<title>PC_NightClock</title>
+<title>Night Clock</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'SF Pro Display','Segoe UI',system-ui,-apple-system,sans-serif;user-select:none;-webkit-user-select:none;touch-action:manipulation}
-#clock-screen{width:100%;height:100%;display:none;align-items:center;justify-content:center}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Roboto','Segoe UI',system-ui,sans-serif;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+#clock-screen{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 #time{font-weight:200;letter-spacing:-0.08em;line-height:1;transition:color 0.6s;text-align:center;width:100%}
-#portrait-msg{display:none;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:rgba(255,255,255,0.25);font-size:15px;text-align:center;padding:40px}
-#portrait-msg svg{opacity:0.2}
-#charge-msg{display:none;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:rgba(255,255,255,0.2);font-size:15px;text-align:center;padding:40px}
 #controls{position:fixed;bottom:20px;left:0;right:0;display:flex;justify-content:center;gap:14px;opacity:0;transition:opacity 0.4s;z-index:10}
 #controls.show{opacity:1}
 .btn{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);padding:7px 16px;border-radius:20px;font-size:12px;font-family:inherit;cursor:pointer;transition:all 0.2s;-webkit-tap-highlight-color:transparent}
@@ -43,28 +37,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'SF
   </div>
 </div>
 
-<div id="portrait-msg">
-  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-    <rect x="4" y="2" width="16" height="20" rx="2"/>
-    <path d="M14 12H10M12 10l-2 2 2 2"/>
-  </svg>
-  Rotate your phone to landscape
-</div>
-
-<div id="charge-msg">
-  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-    <rect x="6" y="2" width="12" height="20" rx="2"/>
-    <path d="M13 7l-2 5h2l-2 5" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  Plug in charger to activate
-</div>
-
 <div id="charge-icon">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
   <span id="battery-pct"></span>
 </div>
-
-<div id="fs-hint" style="position:fixed;bottom:40%;left:0;right:0;text-align:center;color:rgba(255,255,255,0.2);font-size:14px;pointer-events:none;transition:opacity 1s">Tap anywhere for fullscreen</div>
 
 <div id="brightness">
   <label>DIM</label>
@@ -76,7 +52,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'SF
 
 <div id="controls">
   <button class="btn" id="btn-24" onclick="toggle24h()">24h</button>
-  <button class="btn" id="btn-charge" onclick="toggleChargeOnly()">Always on</button>
 </div>
 
 <script>
@@ -89,15 +64,22 @@ const themes=[
   {accent:'#999999',dot:'#888888'},
 ];
 
-let currentTheme=0,is24h=true,chargeOnly=false,isCharging=false,isLandscape=false;
-let controlsVisible=false,controlsTimer=null,wakeLock=null;
+let currentTheme=0,is24h=true,isCharging=false;
+let controlsVisible=false,controlsTimer=null;
 
 const $=id=>document.getElementById(id);
-const elTime=$('time'),elClock=$('clock-screen'),elPortrait=$('portrait-msg');
-const elChargeMsg=$('charge-msg'),elControls=$('controls'),elDots=$('theme-dots');
-const elBtn24=$('btn-24'),elBtnCharge=$('btn-charge'),elBurnIn=$('burn-in');
+const elTime=$('time'),elClock=$('clock-screen');
+const elControls=$('controls'),elDots=$('theme-dots');
+const elBtn24=$('btn-24'),elBurnIn=$('burn-in');
 const elChargeIcon=$('charge-icon'),elBatteryPct=$('battery-pct');
 const elBright=$('brightness'),elBrightSlider=$('bright-slider');
+
+// Called from Android native code
+function onNativeCharging(charging, pct){
+  isCharging=charging;
+  elChargeIcon.classList.toggle('on',isCharging);
+  elBatteryPct.textContent=pct+'%';
+}
 
 function setBrightness(v){
   elTime.style.opacity=v/100;
@@ -125,10 +107,8 @@ function setTheme(i){
 
 function updateSize(){
   const vw=window.innerWidth,vh=window.innerHeight;
-  isLandscape=vw>vh;
   const size=Math.min(vw/2.8,vh*0.92);
   elTime.style.fontSize=size+'px';
-  updateVisibility();
 }
 
 function updateClock(){
@@ -139,33 +119,12 @@ function updateClock(){
   else{elTime.textContent=String(h).padStart(2,'0')+':'+m;}
 }
 
-function updateVisibility(){
-  const active=!chargeOnly||isCharging;
-  const showClock=isLandscape&&active;
-  const showPortrait=!isLandscape&&active;
-  const showChargeWait=chargeOnly&&!isCharging;
-
-  elClock.style.display=showClock?'flex':'none';
-  elPortrait.style.display=showPortrait?'flex':'none';
-  elChargeMsg.style.display=showChargeWait?'flex':'none';
-
-  if(showClock)reqWake();else relWake();
-}
-
 function toggle24h(){
   is24h=!is24h;
   elBtn24.textContent=is24h?'24h':'12h';
   elBtn24.classList.toggle('active',!is24h);
   localStorage.setItem('nc_24h',is24h);
   updateClock();
-}
-
-function toggleChargeOnly(){
-  chargeOnly=!chargeOnly;
-  elBtnCharge.classList.toggle('active',!chargeOnly);
-  elBtnCharge.textContent=chargeOnly?'Charging only':'Always on';
-  localStorage.setItem('nc_charge',chargeOnly);
-  updateVisibility();
 }
 
 function showCtrls(){
@@ -184,52 +143,21 @@ function hideCtrls(){
   elBright.classList.remove('show');
 }
 
-async function reqWake(){
-  try{if('wakeLock' in navigator&&!wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null});}}catch(e){}
-}
-function relWake(){if(wakeLock){wakeLock.release();wakeLock=null;}}
-
 function burnIn(){
   const x=Math.round(Math.sin(Date.now()/60000)*5);
   const y=Math.round(Math.cos(Date.now()/45000)*3);
   elBurnIn.style.transform='translate('+x+'px,'+y+'px)';
 }
 
-async function initBattery(){
-  try{
-    if('getBattery' in navigator){
-      const b=await navigator.getBattery();
-      const up=()=>{
-        isCharging=b.charging;
-        elChargeIcon.classList.toggle('on',isCharging);
-        elBatteryPct.textContent=Math.round(b.level*100)+'%';
-        updateVisibility();
-      };
-      b.addEventListener('chargingchange',up);
-      b.addEventListener('levelchange',up);
-      up();
-    }else{fallbackNoBattery();}
-  }catch(e){fallbackNoBattery();}
-}
-
-function fallbackNoBattery(){
-  isCharging=true;chargeOnly=false;
-  elBtnCharge.style.display='none';
-  updateVisibility();
-}
-
 document.addEventListener('click',e=>{
   if(e.target.closest('.btn')||e.target.closest('.dot')||e.target.closest('#brightness'))return;
-  if(!document.fullscreenElement){document.documentElement.requestFullscreen().catch(()=>{});}
   controlsVisible?hideCtrls():showCtrls();
 });
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')updateVisibility();});
 window.addEventListener('resize',updateSize);
 
 const sv=k=>localStorage.getItem(k);
 if(sv('nc_theme')!==null)currentTheme=parseInt(sv('nc_theme'));
 if(sv('nc_24h')!==null){is24h=sv('nc_24h')==='true';elBtn24.textContent=is24h?'24h':'12h';}
-if(sv('nc_charge')!==null){chargeOnly=sv('nc_charge')==='true';elBtnCharge.textContent=chargeOnly?'Charging only':'Always on';elBtnCharge.classList.toggle('active',!chargeOnly);}
 
 initDots();
 elTime.style.color=themes[currentTheme].accent;
@@ -237,7 +165,6 @@ const savedBright=sv('nc_bright');
 if(savedBright!==null){elBrightSlider.value=savedBright;elTime.style.opacity=savedBright/100;}
 updateSize();
 updateClock();
-initBattery();
 
 function scheduleNextMinute(){
   const now=Date.now();
@@ -246,10 +173,6 @@ function scheduleNextMinute(){
 }
 scheduleNextMinute();
 setInterval(burnIn,60000);
-
-const fsHint=$('fs-hint');
-setTimeout(()=>{fsHint.style.opacity='0'},3000);
-document.addEventListener('fullscreenchange',()=>{fsHint.style.opacity='0';updateSize();});
 </script>
 </body>
 </html>
