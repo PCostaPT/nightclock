@@ -239,8 +239,13 @@ updateSize();
 updateClock();
 initBattery();
 
-setInterval(updateClock,1000);
-setInterval(burnIn,30000);
+function scheduleNextMinute(){
+  const now=Date.now();
+  const ms=60000-(now%60000)+50;
+  setTimeout(()=>{updateClock();scheduleNextMinute();},ms);
+}
+scheduleNextMinute();
+setInterval(burnIn,60000);
 
 const fsHint=$('fs-hint');
 setTimeout(()=>{fsHint.style.opacity='0'},3000);
